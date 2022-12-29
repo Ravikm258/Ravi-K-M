@@ -1,0 +1,440 @@
+#include<stdio.h>
+#include<stdint.h>
+#include<string.h>
+#include<stdlib.h>
+
+#define BIT 8
+
+void data_decompression_bit_level(uint8_t *compressed_data,uint8_t snapshot,uint8_t bit_count,uint64_t *decompressed);
+uint8_t hex_to_byte(uint8_t *src,uint32_t src_start_pos,uint32_t src_len);
+void call_module_1(uint8_t  *byte,uint32_t pos);
+
+uint32_t lafm_utils_decode_from_hex(uint8_t * dst, uint32_t dst_len, uint32_t dst_start_pos, uint8_t * src,
+    uint32_t src_len, uint32_t src_start_pos, uint32_t bytes_to_decode)
+{
+    if(src == NULL || src_len % 2 == 1)
+    {
+        return 0;
+    }
+    else
+    {
+        uint32_t result=0;
+        if(dst_len>=bytes_to_decode)
+        {
+            if(src_len>=bytes_to_decode*2-1)
+            {
+                while ((src_start_pos<src_len))
+                {
+                    dst[dst_start_pos]= hex_to_byte(src,src_start_pos,src_len);
+                    src_start_pos=src_start_pos + 2;
+                    dst_start_pos+=1;
+                    result++;
+                }
+                return result;
+            }
+        }
+    }
+}
+
+uint8_t hex_to_byte(uint8_t *src,uint32_t src_start_pos,uint32_t src_len)
+{
+    uint8_t nib1=0,nib2=0;
+    nib1=src[src_start_pos+0];
+    nib2=src[src_start_pos+1];
+    if(nib1 >= 'A' && nib1 <= 'F')
+        nib1=(nib1-65)+10;
+
+    if(nib2 >='A' && nib2 <='F')
+        nib2=(nib2-65)+10;
+    
+    if(nib1 >= 'a' && nib1 <= 'f')
+        nib1=(nib1-97)+10;
+
+    if(nib2 >='a' && nib2 <= 'f')
+        nib2=(nib2-97)+10;
+    
+    if(nib1 >= '0' && nib1 <= '9')
+        nib1=nib1-48;
+
+    if(nib2 >= '0' && nib2 <= '9')
+        nib2=nib2-48;
+
+    nib1 = (nib1<<4)|nib2;
+    return nib1;      
+        
+}
+
+/*check for header and return start position*/
+uint32_t check_header(uint8_t *byte,uint32_t size,uint8_t *ch,uint32_t len)
+{
+    uint32_t index=0;
+    uint8_t *res=strstr(byte,ch);
+    index=res-byte;
+    if(index>=0)
+        return index;
+    else
+        return -1;
+}
+
+
+
+/* actual crc*/
+uint16_t get_crc(uint8_t *byte,uint32_t size,uint32_t start_pos)
+{
+    uint8_t hex[2];
+    hex[0]=byte[start_pos];
+    hex[1]=byte[start_pos+1]; 
+    uint16_t crc_val=hex[1]<<8|hex[0];
+    return crc_val;
+}
+
+
+
+/*calculated crc*/
+uint16_t lafc_crc16_compute(uint8_t const * p_data, uint16_t size, uint16_t const * p_crc)
+{
+    uint16_t crc = (p_crc == NULL) ? 0xFFFF : *p_crc;
+
+    for (uint16_t i = 0; i < size; i++)
+    {
+        crc = (uint16_t)(crc >> 8) | (uint16_t)(crc << 8);
+        crc = (uint16_t)(crc ^ p_data[i]);
+        crc ^= (uint16_t)((crc & (uint16_t)0xFF) >> 4);
+        crc ^= (uint16_t)((crc << 8) << 4);
+        crc = (uint16_t)(crc ^ (((crc & 0xFF) << 4) << 1));
+    }
+    return crc;
+}
+
+uint8_t get_module_count(uint8_t *byte,uint32_t start_pos)
+{
+    uint8_t hex;
+    hex=byte[start_pos];
+    return hex;
+}
+
+uint16_t module_code_and_size(uint8_t *byte, uint32_t start_pos)
+{
+    uint8_t hex[2];
+    uint16_t val=0;
+    hex[0]=byte[start_pos];
+    hex[1]=byte[start_pos+1];
+    val=hex[1]<<8|hex[0];
+    return val;
+}
+
+uint64_t get_uptime(uint8_t *byte,uint32_t start_pos,uint32_t no_of_bytes)
+{
+    uint64_t num=0;
+    uint8_t i;
+    for(i=0;i<no_of_bytes;i++)
+    {
+        num |= ((uint64_t)(byte[start_pos])<<(i*8));
+        start_pos++;
+    }
+    return num;
+}
+
+void call_module_4(uint8_t *byte,uint32_t st_pos)
+{
+    st_pos=12;
+    uint8_t i;
+    uint16_t mod_size = ((uint16_t)((byte[st_pos])<<0) | ((uint16_t)(byte[st_pos+1])<<8));
+    printf("\nmodule size --- %d\n\n",mod_size);
+    st_pos+=2;
+    uint64_t uptime;
+    uptime=get_uptime(byte,st_pos,8);
+    printf("uptime ---- ");
+    printf("%016X",uptime);
+    printf("\n\n");
+    st_pos+=8;
+    printf("%d\n",st_pos);
+    uint8_t device_id_size=byte[st_pos];
+    printf("device id size ----%d\n",device_id_size);
+    uint8_t device_id[device_id_size];
+    memcpy(device_id,byte+(st_pos+1),device_id_size);
+    printf("device Id --- ");
+    for(i=0;i<device_id_size;i++)
+    {
+        printf("%02X",device_id[i]);
+    }
+    printf("\n\n");
+
+    st_pos+=(device_id_size+1);
+    uint8_t part_no_size=byte[st_pos];
+    uint8_t part_no[part_no_size];
+    printf("part no size ---- %d\n",part_no_size);
+    memcpy(part_no,byte+(st_pos+1),part_no_size);
+    printf("Part number --- ");
+    for(i=0;i<part_no_size;i++)
+    {
+        printf("%c",part_no[i]);
+    }
+    printf("\n\n");
+
+    st_pos+=(part_no_size+1);
+
+    uint8_t hw_ver_size=byte[st_pos];
+    uint8_t hw_ver[hw_ver_size];
+    printf("H/W version size -- %d\n",hw_ver_size);
+    memcpy(hw_ver,byte+(st_pos+1),hw_ver_size);
+    printf("H/W version --- ");
+    for(i=0;i<hw_ver_size;i++)
+    {
+        printf("%c",hw_ver[i]);
+    }
+    printf("\n\n");
+
+    st_pos+=(hw_ver_size+1);
+    uint8_t fw_ver_size=byte[st_pos];
+    uint8_t fw_ver[fw_ver_size];
+    printf("F/W version size ---%d \n",fw_ver_size);
+    memcpy(fw_ver,byte+(st_pos+1),fw_ver_size);
+    printf("F/W version --- ");
+    for(i=0;i<fw_ver_size;i++)
+    {
+        printf("%c",fw_ver[i]);
+    }
+    printf("\n\n");
+    st_pos+=(fw_ver_size+1);
+    uint8_t pl_size=byte[st_pos];
+    uint8_t pl_sign[pl_size];
+    printf("PL sign size--- %d \n",pl_size);
+    memcpy(pl_sign,byte+(st_pos+1),pl_size);  
+    printf("PL sign --- ");
+    for(i=0;i<pl_size;i++)
+    {
+        printf("%02X",pl_sign[i]);
+    }
+    printf("\n\n");
+}
+
+
+int main()
+{
+    
+    //uint8_t *str="4C4135690007008B00010400860018F6000000000000102B420332313038353033E12C6A29574B104D4643333941314C3241463752202020104C4146435F44454641554C545F485700294C4146435F43414E5F46575F56325F325F312C204E6F7620203720323032322C31333A33323A30350020AA2F3C01B746D205EE4AAEB3286486D17D2171D281407C72DC158F3467E3FE71D398";
+    uint8_t *str = "4C413569007B0CCF03010100CA0339578A2000000000203C432729AFCFBF64C2D8C0683741653303AC62AA16DA4AA148C2637CCD42543F20B90BE80300034007000000007514B275000000007614C875000000007614B875BA0BE8030003400799040000FD18A70F9B040000FD18A70F99040000FD189D0FBB0BE8030003400700000100F641283800000100F641283800000100F6412838BC0BE80300034007830B4C360000BB00830B4C360000BB00830B4C360000BB00BD0BE80300034007DB7FFB7F0680FF7FDC7FFC7F06800180DC7FFD7F07800080BE0BE80300034007FB7FFD7F0480FE7FFD7FFB7F0680FF7FFC7FFC7F08800080BF0BE80300034007028002800280048001800380048005800380038003800580C00BE80300034007038000800280008005800180048002800780018006800280C10BE803000340076C326C326C326C326C326C326C326C326C326C326C326C32C20BE803000340076C326C326C326C326C326C326C326C326C326C326C326C32C30BE80300034007793179317931793179317931793179317931793179317931C40BE80300034007793179317931793179317931793179317931793179317931C50BE80300034007BB00020021000000BB00020021000000BB00020021000000C60BE80300034007000000000000000000000000000000000000000000000000C70BE803000340079A18C800000064009A18C800000064009A18C80000006400C80BE80300034007651777042B02D80B661777042B02D80B691777042B02D80BC90BE80300034007DB7F06807B142B00DC7F06807B142A00DE7F09807B142B00CA0BE8030003400779316C320228000079316C320228000079316C3202280000CB0BE803000340070100040000FFFF000100440000FFFF000100400000FFFF00CC0BE80300034007000000000000000000000000000000000000000000000000CD0BE80300034000CE0BE80300034007E2173D0005000000E2173D0005000000E2173D0005000000CF0BE80300034007072607262476020007260726247602000726072624760200D00BE80300034007FD07000070175E170008000070176917FF07000070176517D10BE80300034007000800080008000800080008000800080008000800080008D20BE80300034007000800080008000800080008000800080008000800080008D30BE80300034007006000600060006000600060006000600060006000600060D40BE80300034007006000600060006000600060006000600060006000600060D50BE8030003400786380100F9FE010086380100F9FE010086380100F9FE0100D60BE80300034000D70BE80300034000D80BE803000340008B6B";
+    //uint8_t *str = "4C413564006964F3030204001000F71D8A2000000000C3CA26A8840100000C00DA034C41356900760CCF03010100CA039B1C8A2000000000203C432729AFCFBF64C2D8C0683741653303AC62AA16DA4AA148C2637CCD42543F20B90BE80300034007000000007514997500000000751483750000000075147B75BA0BE803000340079A0400007F19DB0F9A0400007F19BE0F9A0400007F19BE0FBB0BE8030003400700000100F641283800000100F641283800000100F6412838BC0BE80300034007830B4C360000BB00830B4C360000BB00830B4C360000BB00BD0BE80300034007CD7FEC7FF77FF07FCC7FED7FF77FF17FCD7FEE7FF87FF37FBE0BE80300034007EB7FEB7FF87FEF7FEC7FEB7FF67FF07FED7FED7FF97FF37FBF0BE80300034007F37FF47FF27FF57FF37FF57FF47FF67FF37FF57FF67FF77FC00BE80300034007F67FF17FF47FF27FF67FF17FF57FF37FF87FF37FF77FF47FC10BE803000340076C326C326C326C326C326C326C326C326C326C326C326C32C20BE803000340076C326C326C326C326C326C326C326C326C326C326C326C32C30BE80300034007793179317931793179317931793179317931793179317931C40BE80300034007793179317931793179317931793179317931793179317931C50BE80300034007BB00020021000000BB00020021000000BB00020021000000C60BE80300034007000000000000000000000000000000000000000000000000C70BE803000340079A18C800000064009A18C800000064009A18C80000006400C80BE80300034007711777042B02D80B6C1777042B02D80B6C1777042B02D80BC90BE80300034007CD7FF87F78142B00CC7FF77F78142B00CD7FF97F79142C00CA0BE8030003400779316C320228000079316C320228000079316C3202280000CB0BE803000340070100400000FFFF000100040000FFFF000100400000FFFF00CC0BE80300034007000000000000000000000000000000000000000000000000CD0BE80300034000CE0BE80300034007E2173D0005000000E2173D0005000000E2173D0005000000CF0BE80300034007072607262476020007260726247602000726072624760200D00BE80300034007040800007017771700080000701769170308000070177417D10BE80300034007000800080008000800080008000800080008000800080008D20BE80300034007000800080008000800080008000800080008000800080008D30BE80300034007006000600060006000600060006000600060006000600060D40BE80300034007006000600060006000600060006000600060006000600060D50BE8030003400786380100F9FE010086380100F9FE010086380100F9FE0100D60BE80300034000D70BE80300034000D80BE80300034000A49CBE02";
+    uint32_t s_len=strlen(str);
+    uint32_t size = s_len/2;
+    uint8_t byte[size];
+    //printf("%d\n",size);
+    uint32_t decoded_bytes = lafm_utils_decode_from_hex(byte,size,0,str,s_len,0,size);
+    if(decoded_bytes==0)
+        exit(1);
+    uint32_t i;
+    for(i=0;i<decoded_bytes;i++)
+    {
+        printf("%02X ",byte[i]);
+    }
+
+    unsigned char *header="LA5";
+    uint32_t len= strlen(header);
+    uint32_t st_pos=0;
+    if(decoded_bytes>len)
+    {
+        st_pos= check_header(byte,size,header,len);
+        printf("\n\nstart_pos = %d \n",st_pos);
+    }
+    if(st_pos<0 || st_pos>decoded_bytes)
+    {
+        exit(1);
+    }
+    else
+    {
+        uint16_t beacon_type = ((uint16_t)(byte[3]))|((uint16_t)(byte[4])<<8);
+        printf("Beacon Type ---  %d\n",beacon_type);
+
+        uint16_t seq_Id = ((uint16_t)(byte[5]))|((uint16_t)(byte[6])<<8);
+        printf("Sequence ID ---- %d\n",seq_Id);
+
+        uint16_t payload_length = ((uint16_t)(byte[7]))|((uint16_t)(byte[8])<<8);
+        printf("Payload length ---- %d\n",payload_length);
+
+        uint8_t buffer = (decoded_bytes-payload_length);
+
+        if(buffer>=11)
+        {
+            uint16_t crc_data = get_crc(byte,size,(st_pos+9+payload_length));
+            printf("actual crc --- 0x%04X \n",crc_data);
+
+                
+                uint16_t calc_crc = lafc_crc16_compute(byte,size-2,NULL);
+                printf("calculated crc --- 0x%04X ",calc_crc);
+
+                if(crc_data==calc_crc)
+                {
+                    printf("\nprocess\n");
+                    uint8_t mod_count=byte[st_pos+9];
+                    printf("module_count --- %d",mod_count);
+
+                    uint16_t mod_code=((uint16_t)(byte[10])<<0) | ((uint16_t)(byte[11])<<8);
+                    printf("\nmodule code --- %d",mod_code);
+                    st_pos=st_pos+11;
+                    if(mod_code==4)
+                    {
+                        call_module_4(byte,st_pos);
+                    }
+                    else if(mod_code==1)
+                    {
+                        call_module_1(byte,st_pos);
+                    }
+                }
+                else
+                    printf("\ndo not process\n");
+        }
+
+    }
+}
+
+void call_module_1(uint8_t  *byte,uint32_t pos)
+{
+    pos=12;
+    uint16_t mod_size = ((uint16_t)((byte[pos])<<0) | ((uint16_t)(byte[pos+1])<<8));
+    printf("\nmodule size is ---- %d\n",mod_size);
+    pos+=2;
+    uint64_t uptime=get_uptime(byte,pos,8);
+    printf("uptime is %d mili seconds \n",uptime);
+    printf("\n\n");
+    pos+=8;
+    uint8_t i=0;
+    uint32_t plsign_size=byte[pos];
+    printf("PL sign size is ---- %d\n",plsign_size);
+    uint8_t pl_sign[plsign_size];
+    memcpy(pl_sign,byte+(pos+1),plsign_size);
+    printf("PL SIGN ---- ");
+    for(i=0;i<plsign_size;i++)
+    {
+        printf("%02X",pl_sign[i]);
+    }
+
+    pos=pos+plsign_size+1;
+
+    uint8_t no_of_PID=byte[pos];
+    printf("\nNo. of PID ----  %d\n",no_of_PID);
+         pos=pos+1;
+
+    while (no_of_PID)
+    {
+
+    uint16_t PID_number = ((uint16_t)((byte[pos])<<0) | ((uint16_t)(byte[pos+1])<<8));
+    printf("PID Number is --- %d\n",PID_number);
+
+
+    pos = pos+2;
+    uint32_t save_intrvl = 0;
+    save_intrvl = ((uint32_t)((byte[pos])) | ((uint32_t)((byte[pos+1])<<8)) | ((uint32_t)(byte[pos+2])<<16)) ;
+    printf("Save Interval --- %d ms\n",save_intrvl);
+    
+    pos+=3;
+    
+    uint8_t snapshot_count = byte[pos];
+    printf("snapshot count --- %d \n",snapshot_count);
+
+    pos+=1;
+
+    uint8_t bit_length = byte[pos];
+    printf("Bit length ----- %d bits\n",bit_length);
+
+    pos+=1;
+
+    uint16_t validity_flag=0;
+    if(snapshot_count<=8)
+    {
+        validity_flag = byte[pos];
+        pos=pos+1;
+    }
+    else if(snapshot_count > 8 && snapshot_count <= 16)
+    {
+        validity_flag = byte[pos];
+        pos += 2;
+    }
+    
+
+    /* to get no of valid data*/
+    uint8_t valid_data = 0;
+    for(i=0;i<snapshot_count;i++)
+    {
+        if((validity_flag>>i) & 0x01)
+            valid_data++;
+    }
+
+
+    printf("Valid data ---   %d\n",valid_data);
+    uint8_t snap_size= (((bit_length*valid_data)+7)/8);
+    printf("Snapshot size is ---  %d bytes\n",snap_size);
+
+    uint8_t snapshot[snap_size];
+    memcpy(snapshot,byte+pos,snap_size);
+
+
+        for(i=0;i<snap_size;i++)
+        {
+            if(i==8 || i== 16)
+                printf(" ");
+            printf("%02X",snapshot[i]);
+        }
+        uint64_t  val[snapshot_count];
+        memset(val,0,sizeof(val));
+        data_decompression_bit_level(snapshot,snapshot_count,bit_length,val);
+        if(valid_data)
+        {
+            for(i=0;i<snapshot_count;i++)
+            {
+                printf("\n%016llX\n\n",val[i]);
+            }
+        }
+
+        printf("\n\n");
+        pos += snap_size;
+        no_of_PID--;
+        printf("\n\n");
+   }
+    
+}
+
+void data_decompression_bit_level(uint8_t *packed_data,uint8_t snapshot_count,uint8_t bit_len,uint64_t *unpacked)
+{
+    uint8_t bits = 0, bit_count = 0 ;
+    uint8_t ext_bits = 0;
+    while (snapshot_count)
+    {
+        if(bit_len % 8 == 0)
+        {
+            uint8_t i = 0 ; 
+            uint8_t bit_count = bit_len ;
+            while(bit_count >= 8)
+            {
+                *unpacked = *unpacked | (uint64_t)(*packed_data) << i*8 ;
+                i++;
+                *packed_data++;
+                bit_count-=8;
+            }
+
+            snapshot_count--;
+            unpacked++;
+        }
+        else
+        {
+            *unpacked = *unpacked | (uint64_t)((*packed_data & 0x01) << bits);
+            *packed_data = *packed_data >> 1;
+            ext_bits++;
+            bits++;
+            bit_count++;
+            if(ext_bits == bit_len)
+            {
+                unpacked++ ;
+                bits = 0 ;
+                snapshot_count-- ;
+                ext_bits = 0;
+            }
+            
+            if(bit_count == 8)
+            {
+                packed_data++ ;
+                bit_count = 0 ;
+            }
+        }
+    }
+}
