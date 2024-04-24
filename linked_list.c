@@ -129,6 +129,7 @@ int main()
     insertRandom(&head,3,50);
     insertRandom(&head,1,25);
     insertRandom(&head,6,55);
+    insertRandom(&head,7,85);
     printf("before reverse\n");
     display(&head);
     reverse_list(&head);
