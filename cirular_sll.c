@@ -41,8 +41,8 @@ int main()
     add(rx_buffer_4);
     add(rx_buffer_5);
     printf("%u ",head->addr);
-    //printf("%u ",head->next->addr);
-    //printf("%u ",tail->addr);
+    printf("%u ",head->next->addr);
+    printf("%u ",tail->addr);
     printf("%u ",&rx_buffer_1);
     //printf("%u ",&rx[1]);
    // printf("%u ",&rx_buffer_2);
